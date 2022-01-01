@@ -9,6 +9,9 @@ with Ada.Numerics.Discrete_Random;
 
 procedure Simulation is
 
+   Energy_Lose_Deliver: constant Integer := 10;
+   Energy_Lose_Take: constant Integer := 7;
+
    Number_Of_Products: constant Integer := 5;
    Number_Of_Assemblies: constant Integer := 3;
    Number_Of_Consumers: constant Integer := 2;
@@ -45,14 +48,21 @@ procedure Simulation is
       entry Deliver(Assembly: in Assembly_Type; Number: out Integer);
    end Buffer;
 
+   --task type Seller is
+   --   entry Ask_for(Assembly: in Assembly_Type;  Ans: in Boolean);
+   --end Seller;
+
+
    P: array ( 1 .. Number_Of_Products ) of Producer;
    K: array ( 1 .. Number_Of_Consumers ) of Consumer;
    B: Buffer;
 
+
+
    task body Producer is
       subtype Production_Time_Range is Integer range 3 .. 5;
       package Random_Production is new
-	Ada.Numerics.Discrete_Random(Production_Time_Range);
+        Ada.Numerics.Discrete_Random(Production_Time_Range);
       G: Random_Production.Generator;	--  generator liczb losowych
       Product_Type_Number: Integer;
       Product_Number: Integer;
@@ -64,13 +74,14 @@ procedure Simulation is
          Product_Type_Number := Product;
          Production := Production_Time;
       end Start;
-      Put_Line("Rozpoczeto gotowanie produktu: " & Product_Name(Product_Type_Number));
+      Put_Line("Rozpoczeto przygotowywanie produktu: " & Product_Name(Product_Type_Number));
       loop
          delay Duration(Random_Production.Random(G)); --  simulate production
 
          Put_Line("Wytworzono " & Product_Name(Product_Type_Number)
                   & " nr "  & Integer'Image(Product_Number));
-         -- Accept for storage
+         --delay Duration(Random_Production.Random(G)/2);
+
          B.Take(Product_Type_Number, Product_Number);
          Product_Number := Product_Number + 1;
 
@@ -108,29 +119,17 @@ procedure Simulation is
          else
             Someone_Using_Lada := True; -- ustawienie statusu poniewaz obecny konsumer uzywa lady
             Put_Line(Consumer_Name(Consumer_Nb) & " podchodzi do lady z checia kupna " & Assembly_Name(Assembly_Type) );
-            -- take an assembly for consumption
-            --select
-               --S.Ask_For(Assembly_Type, Assembly_Number);
+
             delay Duration(0.5);
 
-            B.Deliver(Assembly_Type, Assembly_Number);
-
-            if Assembly_Number /= 0 then
-
+            select
+               B.Deliver(Assembly_Type, Assembly_Number);
                Put_Line(Consumer_Name(Consumer_Nb) & ": odchodzi zadowolony z " &
                           Assembly_Name(Assembly_Type) & " nr " &
                           Integer'Image(Assembly_Number));
-            else
-               Put_Line(Consumer_Name(Consumer_Nb) & " odchodzi od lady gdyz jego zestaw jest niedostepny ");
-            end if;
-
-
-
-
-            --or delay 1.0;
-             --    S.Stop;
-            --     Put_Line(Consumer_Name(Consumer_Nb) & " odchodzi od lady gdyz jego zestaw jest niedostepny ");
-            --end select;
+            or delay 2.0;
+                  Put_Line(Consumer_Name(Consumer_Nb) & " odchodzi zdenerwowany od lady");
+            end select;
 
             Someone_Using_Lada := False; -- konsumer odchodzi od lady i przestaje jej uzywac
          end if;
@@ -139,6 +138,7 @@ procedure Simulation is
    end Consumer;
 
    task body Buffer is
+      Seller_Energy: Integer := 100;
       Storage_Capacity: constant Integer := 30;
       type Storage_type is array (Product_Type) of Integer;
       Storage: Storage_type
@@ -261,11 +261,24 @@ procedure Simulation is
       Put_Line("Lada zaczyna przyjmowac produkty");
       Setup_Variables;
       loop
+
+
+
+         if Seller_Energy <= 10 then
+            Put_Line("Sprzedawca odchodzi od kasy by napic sie kawy, zw 5sek");
+            Seller_Energy := 100;
+            delay 8.0;
+         elsif Seller_Energy <= 30 and  Seller_Energy >= 20 then
+            Put_Line("Sprzedawca zaczyna odczuwac ZMECZENIE");
+         end if;
+
+
+
          select
             accept Deliver(Assembly: in Assembly_Type; Number: out Integer) do
-               --loop
+               Seller_Energy := Seller_Energy - Energy_Lose_Deliver;
                if Can_Deliver(Assembly) then
-                  Put_Line("Skompletowano " & Assembly_Name(Assembly) & " nr " &
+                  Put_Line("Sprzedawca podaje " & Assembly_Name(Assembly) & " nr " &
                              Integer'Image(Assembly_Number(Assembly)));
                   for W in Product_Type loop
                      Storage(W) := Storage(W) - Assembly_Content(Assembly, W);
@@ -274,20 +287,16 @@ procedure Simulation is
                   Number := Assembly_Number(Assembly);
                   Assembly_Number(Assembly) := Assembly_Number(Assembly) + 1;
                else
-                  Put_Line("Zabraklo produktow do skompletowania " & Assembly_Name(Assembly));
+                  Put_Line("Sprzedawca ma problemy ze skompletowaniem " & Assembly_Name(Assembly));
                   Number := 0;
                end if;
-               --exit when Number /= 0;
-               --delay 0.5;
-               --end loop;
             end Deliver;
             Storage_Contents;
 
-            --Storage_Contents;
-         or delay Duration(2.0);
-            Put_Line("Sprzedawca: Brak klientow wiec przyjmuje produkty");
+         or
 
             accept Take(Product: in Product_Type; Number: in Integer) do
+               Seller_Energy := Seller_Energy - Energy_Lose_Take;
                if Can_Accept(Product) then
                   Put_Line("Doniesiono " & Product_Name(Product) & " nr " &
                              Integer'Image(Number));
@@ -302,6 +311,7 @@ procedure Simulation is
 
                end if;
             end Take;
+
          end select;
 
       end loop;
